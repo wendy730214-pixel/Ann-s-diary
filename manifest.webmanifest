@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "小日子・親子花園手帳",
+  "short_name": "小日子",
+  "description": "和小烏龜、小豬一起記錄日記、親子約定與零用錢，離線也能保存小故事。",
+  "lang": "zh-TW",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#fbf7ef",
+  "theme_color": "#fbf7ef",
+  "prefer_related_applications": false,
+  "categories": ["education", "lifestyle"],
+  "icons": [
+    {"src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "./icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
