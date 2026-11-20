@@ -68,9 +68,17 @@
  document.addEventListener('change',e=>{const f=e.target.closest('main form');if(f)f.dataset.familyDirty='1';});
  document.addEventListener('submit',e=>{if(e.target.closest('main'))activeSaveForm=e.target;},true);
  function dialogMessage(message){$('#family-dialog-status').textContent=message;}
- function openSettings(){dialogMessage('');$('#family-dialog').showModal();if(engine)syncView();}
+ async function refreshLine(){
+  const profile=connection;
+  $('#family-line-section').hidden=true;if(!engine||engine.meta.member.role==='child')return;
+  try{const reply=await rpc(profile,{action:'line.status'});if(connection!==profile||!engine)return;$('#family-line-section').hidden=false;$('#family-line-status').textContent=!reply.line.configured?'家庭管理者尚未開啟 LINE 通知。':reply.line.connected?'已連接 Ann’s family；家庭更新後將傳送通知給你的 LINE。':'連接自己的 LINE，接收家庭手帳更新通知（最多兩位家長）。';$('#family-line-begin').hidden=!reply.line.configured;$('#family-line-disconnect').hidden=!reply.line.connected;if(reply.line.connected){$('#family-line-authorize').hidden=true;$('#family-line-authorize').removeAttribute('href');}if(reply.line.lastError)$('#family-line-status').textContent+=' '+reply.line.lastError;}catch(error){/* Older backends continue to work without the optional LINE feature. */}
+ }
+ function openSettings(){dialogMessage('');$('#family-line-authorize').hidden=true;$('#family-line-authorize').removeAttribute('href');$('#family-dialog').showModal();if(engine)syncView();void refreshLine();}
  $('#family-open').onclick=openSettings;
  $('#family-close').onclick=()=>{$('#family-dialog').close();};
+ $('#family-line-begin').onclick=async()=>{if(!engine)return;const button=$('#family-line-begin');button.disabled=true;dialogMessage('正在準備你的 LINE 連接頁……');try{const result=await rpc(connection,{action:'line.begin'});const url=new URL(result.url);if(url.origin!=='https://access.line.me'||url.pathname!=='/oauth2/v2.1/authorize')throw Error('LINE 連接網址不正確。');$('#family-line-authorize').href=url.href;$('#family-line-authorize').hidden=false;dialogMessage('請點「前往 LINE 連接通知」，使用你自己的 LINE 登入並加入 Ann’s family 好友。連結十分鐘內有效。');}catch(error){dialogMessage(error.message);}finally{button.disabled=false;}};
+ $('#family-line-disconnect').onclick=async()=>{if(!engine||!confirm('停止傳送家庭更新通知到你自己的 LINE？手帳紀錄會保留。'))return;try{await rpc(connection,{action:'line.disconnect'});$('#family-line-authorize').hidden=true;$('#family-line-authorize').removeAttribute('href');await refreshLine();dialogMessage('已停止傳送到你的 LINE。');}catch(error){dialogMessage(error.message);}};
+ $('#family-line-check').onclick=()=>{void refreshLine();};
  $('#family-connect-form').onsubmit=async e=>{e.preventDefault();const button=$('#family-connect');button.disabled=true;dialogMessage('正在驗證家庭連線……');try{
   const config={endpoint:endpoint($('#family-endpoint').value.trim()),token:$('#family-token').value.trim()};
   if(!/^[A-Za-z0-9_-]{43,128}$/.test(config.token))throw Error('請貼上你自己的完整家庭連線碼。');

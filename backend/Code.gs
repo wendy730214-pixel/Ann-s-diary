@@ -46,7 +46,8 @@ function ensureSheet_(book,name) {
   return sheet;
 }
 
-function doGet() {
+function doGet(e) {
+  if(e&&e.parameter&&e.parameter.state&&(e.parameter.code||e.parameter.error)&&typeof lineCallback_==='function')return lineCallback_(e.parameter);
   return HtmlService.createHtmlOutput('<!doctype html><meta charset="utf-8"><p>小日子家庭同步服務。請從親子手帳內輸入個別連線碼使用；此頁不公開家庭資料。</p>');
 }
 function doPost(e) {
@@ -57,6 +58,7 @@ function doPost(e) {
     if (request.origin !== FAMILY_ORIGIN) throw familyError_('ORIGIN','請從小日子正式網站連接。');
     if (!/^[A-Za-z0-9_-]{20,100}$/.test(request.requestId||'') || !/^[A-Za-z0-9_-]{20,100}$/.test(request.nonce||'')) throw familyError_('REQUEST','連線請求無效。');
     reply = handleFamily_(request);
+    if(reply.ok&&(request.action==='apply'||request.action==='pull')&&typeof lineDrain_==='function'){try{lineDrain_();}catch(lineError){reply.lineWarning=true;}}
   } catch (error) {
     reply = {ok:false,error:{code:error.familyCode||'SERVER',message:error.familyCode?error.message:'同步服務暫時無法完成，請稍後再試。'}};
   }
@@ -77,6 +79,7 @@ function handleFamily_(request) {
     if (!member) throw familyError_('AUTH','連線碼不正確或已停用；請向家人取得自己的新連線碼。');
     var log = ensureSheet_(book,'同步紀錄');
     var replay = replay_(rows_(log));
+    if(String(request.action||'').indexOf('line.')===0&&typeof lineAction_==='function')return lineAction_(request,member,members,replay);
     if (request.action === 'member.add' || request.action === 'member.revoke') {
       if (member.role !== 'admin') throw familyError_('FORBIDDEN','只有家庭管理者可以管理成員。');
       if (request.action === 'member.add') {

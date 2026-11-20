@@ -25,3 +25,16 @@
 ## 驗證
 
 `node outputs/verify-family.cjs` 使用記憶體中的假試算表，驗證跨裝置日記與回覆、角色權限、版本衝突、撲滿防超支、重試不重複、離線重開及連線碼保護。它不會讀寫真實 Google 試算表。
+
+## 家長個人 LINE 通知
+
+1. 家庭專用官方帳號啟用 Messaging API；在同一個提供者下建立 LINE Login Web app 頻道，並連動這個官方帳號。
+2. LINE Login Callback URL 填入目前 Apps Script 部署的 `/exec` 網址。家長登入時只要求 `openid profile`，不要求 email。Privacy policy URL 使用網站的 `privacy.html`。
+3. Apps Script 程式須同時包含 `Code.gs` 及 `LineNotifications.gs`。把 Messaging API 的權杖及 LINE Login 設定保存到指令碼屬性：`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_LOGIN_CHANNEL_ID`、`LINE_LOGIN_CHANNEL_SECRET`、`LINE_CALLBACK_URL`。不要寫進公開程式碼、試算表或聊天內容。
+4. 確認設定後，將 `LINE_NOTIFY_ENABLED` 設為 `true`。由擁有者執行 `prepareLineDelivery`、同意 Google 新增的外部連線與觸發器權限，再更新既有部署版本。
+5. 爸媽各自以自己的手帳家長身分開啟「家庭設定 → LINE 更新通知 → 連接我的 LINE」，前往 LINE 登入並加入家庭官方帳號好友；最多綁定兩位家長。
+6. 只有之後成功同步的新變更會通知，歷史內容不會補發。訊息包含更新者名字、類別與手帳入口；不包含日記全文、金額或家庭連線碼。程式只向已綁定家長逐一推送，不使用全體好友廣播。
+7. 「LINE通知」分頁是發送佇列及紀錄。推送重試使用同一個 `X-Line-Retry-Key`，回應「LINE已接受」不保證對方未封鎖官方帳號或開啟手機通知。超過 23 小時仍未成功的通知會停止自動重試。未完成發送時，每五分鐘重試；通知失敗不影響手帳儲存。
+8. LINE 官方帳號的每月可用額度及計費依帳號方案；不要為了此功能自動購買任何方案。家長可在手帳停止自己的 LINE 通知。
+
+`node outputs/verify-line.cjs` 完全使用假 LINE 回應與假試算表，驗證綁定身分、權限、PKCE、state/nonce、防重複、收件人限制、取消與額度失敗保留；不會傳送真實訊息。

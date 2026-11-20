@@ -12,6 +12,7 @@ const keys={admin:'A'.repeat(43),child:'B'.repeat(43),dad:'C'.repeat(43),guest:'
 const props={ADMIN_BOOTSTRAP_TOKEN:keys.admin,ADMIN_NAME:'媽媽'};let lock=false;
 const context=vm.createContext({Date,Number,Math,JSON,String,Object,Array,Error,isNaN,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]??null,setProperty:(k,v)=>props[k]=v,deleteProperty:k=>delete props[k]})},Utilities:{getUuid:()=>crypto.randomUUID(),DigestAlgorithm:{SHA_256:1},Charset:{UTF_8:1},computeDigest:(_,s)=>[...crypto.createHash('sha256').update(s).digest()]},LockService:{getScriptLock:()=>({waitLock(){assert.equal(lock,false);lock=true;},tryLock(){assert.equal(lock,false);lock=true;return true;},releaseLock(){lock=false;}})},SpreadsheetApp:{openById:id=>{assert.equal(id,'1pWdCgSIRRpiNBjnTh2nMHVt_DaBMahwIg2NoCw5p-vU');return book;},flush(){}},HtmlService:{XFrameOptionsMode:{ALLOWALL:1},createHtmlOutput:html=>({html,setXFrameOptionsMode(){return this;}})}});
 vm.runInContext(fs.readFileSync('backend/Code.gs','utf8'),context);
+vm.runInContext(fs.readFileSync('backend/LineNotifications.gs','utf8'),context);
 const evaluate=s=>vm.runInContext(s,context);evaluate('setupFamily()');assert.equal(props.ADMIN_BOOTSTRAP_TOKEN,undefined);assert.equal(sheets.get('工作表1').data[0][0],'保留原始內容');
 function call(token,data){try{return JSON.parse(JSON.stringify(context.handleFamily_({...data,token})));}catch(e){return {ok:false,error:{code:e.familyCode||'SERVER',message:e.message}};}}
 call(keys.admin,{action:'member.add',name:'女兒',role:'child',newToken:keys.child});call(keys.admin,{action:'member.add',name:'爸爸',role:'parent',newToken:keys.dad});
@@ -19,7 +20,7 @@ assert.equal(call(keys.guest,{action:'pull'}).error.code,'AUTH');assert.equal(ca
 const makeId=()=>crypto.randomUUID();function storage(){const map={};return {getItem:k=>map[k]??null,setItem:(k,v)=>map[k]=v};}
 async function device(token,store=storage()){const e=new Core.Engine({request:async data=>call(token,data),storage:store,cacheKey:token.slice(0,2),makeId});await e.initialize();return e;}
 function mutate(engine,change){const before=engine.state(),after=JSON.parse(JSON.stringify(before));change(after);engine.save(before,after);}
-module.exports={call,keys,context,sheets};
+module.exports={call,keys,context,sheets,props};
 if(require.main===module)(async()=>{
  const kid=await device(keys.child),mom=await device(keys.admin),dad=await device(keys.dad);
  mutate(kid,s=>s.diaries.push({id:'diary-1',date:'2026-11-20',mood:'😊',sticker:'🌷',text:'<script>安全測試</script>',created:Date.now(),author:'假冒名字',replies:[]}));await kid.flush();assert.equal(kid.queue.length,0);await mom.pull();assert.equal(mom.state().diaries[0].author,'女兒');assert.equal(mom.state().diaries[0].text,'<script>安全測試</script>');
