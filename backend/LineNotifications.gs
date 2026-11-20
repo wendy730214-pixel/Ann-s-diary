@@ -68,9 +68,10 @@ function lineNoticeText_(name,changes){
 }
 // Called after a successful API response and also by the owner's retry trigger.
 function deliverLineNotifications(){lineDrain_();}
-function lineDrain_(){
+function lineDrain_(queueOnly){
   var c=lineConfig_();if(!lineReady_(c))return;
   var lock=LockService.getScriptLock();if(!lock.tryLock(1000))return;
+  var selected=[];
   try{
     var p=PropertiesService.getScriptProperties(),book=SpreadsheetApp.openById(FAMILY_SHEET_ID),log=rows_(ensureSheet_(book,'同步紀錄'));
     var members=rows_(ensureSheet_(book,'家庭成員')).filter(function(r){return (r[4]===true||r[4]==='TRUE')&&(r[2]==='admin'||r[2]==='parent');});
@@ -81,23 +82,30 @@ function lineDrain_(){
       members.forEach(function(m){var binding=lineBinding_(m[0]),id=r[0]+':'+m[0];if(binding&&Number(r[1])>binding.afterRevision&&!known[id]){var job=[id,r[0],m[0],binding.userId,Utilities.getUuid(),text,'待發送',new Date().toISOString(),'',''];sheet.appendRow(job);jobs.push(job);known[id]=true;}});
       cursor=Number(r[1]);p.setProperty('LINE_NOTIFY_CURSOR',String(cursor));
     });
-    var attempts=0,deadline=Date.now()+20000,error='';
+    if(queueOnly){SpreadsheetApp.flush();return;}
+    var error='';
     jobs.forEach(function(job,index){
-      if(job[6]!=='待發送'||attempts>=4||Date.now()>deadline)return;
+      var stale=job[6]==='發送中'&&Date.now()-Date.parse(job[8])>180000;
+      if((job[6]!=='待發送'&&!stale)||selected.length>=4)return;
       var binding=lineBinding_(job[2]),active=members.some(function(m){return m[0]===job[2];});
       if(!active||!binding||binding.userId!==job[3]){sheet.getRange(index+2,7).setValue('已取消');return;}
       if(Date.now()-Date.parse(job[7])>23*3600000){sheet.getRange(index+2,7).setValue('已逾期');error='有通知逾期未送出，請檢查 LINE 額度或連線設定。';return;}
-      attempts++;var status=0;
-      try{var response=UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+c.token,'X-Line-Retry-Key':job[4]},payload:JSON.stringify({to:job[3],messages:[{type:'text',text:job[5]}]}),muteHttpExceptions:true,followRedirects:false});status=response.getResponseCode();if(status===200||status===409)sheet.getRange(index+2,7).setValue('LINE已接受');else error=status===429?'LINE 額度或速率限制，通知保留待重試。':'LINE 通知尚未送出，請檢查官方帳號的設定。';}catch(e){error='LINE 通知連線失敗，保留待重試。';}
-      sheet.getRange(index+2,9,1,2).setValues([[new Date().toISOString(),status]]);
+      if(job[8]&&Date.now()-Date.parse(job[8])<(Number(job[9])===429?300000:60000)){if(!error)error='有 LINE 通知等待稍後重試。';return;}
+      sheet.getRange(index+2,7).setValue('發送中');sheet.getRange(index+2,9).setValue(new Date().toISOString());selected.push({row:index+2,job:job});
     });
     p.setProperty('LINE_LAST_ERROR',error);SpreadsheetApp.flush();
   }finally{lock.releaseLock();}
+  // Network calls run without the family data lock, so LINE delays cannot block saving diaries.
+  selected.forEach(function(item){
+    var job=item.job,status=0,error='';
+    try{var response=UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+c.token,'X-Line-Retry-Key':job[4]},payload:JSON.stringify({to:job[3],messages:[{type:'text',text:job[5]}]}),muteHttpExceptions:true,followRedirects:false});status=response.getResponseCode();if(status!==200&&status!==409)error=status===429?'LINE 額度或速率限制，通知保留待重試。':'LINE 通知尚未送出，請檢查官方帳號的設定。';}catch(e){error='LINE 通知連線失敗，保留待重試。';}
+    lock.waitLock(20000);try{var sheet=lineQueueSheet_(SpreadsheetApp.openById(FAMILY_SHEET_ID));if(sheet.getRange(item.row,1).getValues()[0][0]===job[0]){sheet.getRange(item.row,7).setValue(status===200||status===409?'LINE已接受':'待發送');sheet.getRange(item.row,9,1,2).setValues([[new Date().toISOString(),status]]);}if(error)PropertiesService.getScriptProperties().setProperty('LINE_LAST_ERROR',error);SpreadsheetApp.flush();}finally{lock.releaseLock();}
+  });
 }
 // Owner runs this once after setting the five LINE properties and confirming recipients opt in.
 function prepareLineDelivery(){
   if(!lineReady_(lineConfig_()))throw Error('請先完成 LINE 指令碼屬性設定。');
   lineQueueSheet_(SpreadsheetApp.openById(FAMILY_SHEET_ID));
-  var triggers=ScriptApp.getProjectTriggers();if(!triggers.some(function(t){return t.getHandlerFunction()==='deliverLineNotifications';}))ScriptApp.newTrigger('deliverLineNotifications').timeBased().everyMinutes(5).create();
+  var triggers=ScriptApp.getProjectTriggers();if(!triggers.some(function(t){return t.getHandlerFunction()==='deliverLineNotifications';}))ScriptApp.newTrigger('deliverLineNotifications').timeBased().everyMinutes(1).create();
   return '通知重試服務已準備好；家長仍需在手帳內各自綁定自己的 LINE。';
 }

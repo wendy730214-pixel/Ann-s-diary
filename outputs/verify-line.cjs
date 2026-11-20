@@ -8,7 +8,7 @@ c.UrlFetchApp={fetch(url,options={}){
  if(url.endsWith('/token')){exchanges.push(options);return response(200,{id_token:'TEST_ID_TOKEN',access_token:'TEST_USER_TOKEN'});}
  if(url.endsWith('/verify'))return response(200,{iss:'https://access.line.me',aud:props.LINE_LOGIN_CHANNEL_ID,nonce:badNonce?'wrong':options.payload.nonce,exp:Math.floor(Date.now()/1000)+600,sub:subject});
  if(url.endsWith('/status'))return response(200,{friendFlag:friend});
- if(url.endsWith('/push')){pushes.push(options);return response(pushStatus,{});}
+ if(url.endsWith('/push')){assert.equal(call(keys.child,{action:'pull'}).ok,true,'LINE network must not hold the diary lock');pushes.push(options);return response(pushStatus,{});}
  throw Error('Unexpected endpoint: '+url);
 }};
 function begin(token){const r=call(token,{action:'line.begin'});assert.equal(r.ok,true);const url=new URL(r.url),state=url.searchParams.get('state');assert.equal(url.origin,'https://access.line.me');assert.equal(url.searchParams.get('scope'),'openid profile');assert.ok(!r.url.includes(keys.admin));return {url,state,pending:JSON.parse(props['LINE_OAUTH_'+state])};}
@@ -25,15 +25,15 @@ const expired=begin(keys.admin);const old=JSON.parse(props['LINE_OAUTH_'+expired
 assert.ok(callback(begin(keys.admin)).includes('連接成功'));assert.equal(call(keys.admin,{action:'line.status'}).line.connected,true);
 assert.equal(exchanges.at(-1).payload.code_verifier.length,64);assert.ok(!JSON.stringify(call(keys.admin,{action:'line.status'})).includes(subject));
 const apply=id=>call(keys.child,{action:'apply',operation:crypto.randomUUID(),changes:[{kind:'diary',id,baseVersion:0,deleted:false,value:{date:'2026-11-20',text:'絕對不要出現在 LINE 通知中的日記全文',mood:'😊',sticker:'🌷'}}]});
-assert.equal(apply('line-diary-1').ok,true);c.lineDrain_();assert.equal(pushes.length,1);assert.equal(sheets.get('LINE通知').data[1][6],'待發送');
+assert.equal(apply('line-diary-1').ok,true);c.lineDrain_(true);assert.equal(pushes.length,0,'saves enqueue without sending over the network');c.lineDrain_();assert.equal(pushes.length,1);assert.equal(sheets.get('LINE通知').data[1][6],'待發送');
 assert.ok(!pushes[0].payload.includes('日記全文'));assert.ok(!pushes[0].payload.includes(keys.admin));assert.ok(JSON.parse(pushes[0].payload).messages[0].text.includes('女兒'));
-const retryKey=pushes[0].headers['X-Line-Retry-Key'];pushStatus=200;c.lineDrain_();assert.equal(pushes[1].headers['X-Line-Retry-Key'],retryKey);assert.equal(sheets.get('LINE通知').data[1][6],'LINE已接受');c.lineDrain_();assert.equal(pushes.length,2);
+const retryKey=pushes[0].headers['X-Line-Retry-Key'];pushStatus=200;c.lineDrain_();assert.equal(pushes.length,1);sheets.get('LINE通知').data[1][8]='';c.lineDrain_();assert.equal(pushes[1].headers['X-Line-Retry-Key'],retryKey);assert.equal(sheets.get('LINE通知').data[1][6],'LINE已接受');c.lineDrain_();assert.equal(pushes.length,2);
 // A second family member cannot bind the first parent's LINE.
 assert.ok(callback(begin(keys.dad)).includes('另一位家長'));assert.equal(props['LINE_PARENT_'+dad.id],undefined);
 subject='U'+'2'.repeat(32);assert.ok(callback(begin(keys.dad)).includes('連接成功'));
 const extra='E'.repeat(43);call(keys.admin,{action:'member.add',name:'其他家長',role:'parent',newToken:extra});assert.equal(call(extra,{action:'line.begin'}).error.code,'LINE_LIMIT');
 assert.equal(apply('line-diary-2').ok,true);pushStatus=503;c.lineDrain_();const queue=sheets.get('LINE通知');assert.equal(queue.data.length,4);assert.equal(queue.data[2][6],'待發送');assert.equal(queue.data[3][6],'待發送');
-call(keys.dad,{action:'line.disconnect'});pushStatus=409;c.lineDrain_();assert.equal(queue.data[2][6],'LINE已接受');assert.equal(queue.data[3][6],'已取消');
+call(keys.dad,{action:'line.disconnect'});pushStatus=409;queue.data[2][8]='';c.lineDrain_();assert.equal(queue.data[2][6],'LINE已接受');assert.equal(queue.data[3][6],'已取消');
 const before=pushes.length;assert.equal(apply('line-diary-2').error.code,'CONFLICT');c.lineDrain_();assert.equal(pushes.length,before);
 // Opting back in starts with future updates, never backfills earlier private entries.
 props.LINE_NOTIFY_CURSOR='0';subject='U'+'2'.repeat(32);assert.ok(callback(begin(keys.dad)).includes('連接成功'));c.lineDrain_();assert.equal(queue.data.length,4);

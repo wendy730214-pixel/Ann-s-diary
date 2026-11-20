@@ -58,7 +58,7 @@ function doPost(e) {
     if (request.origin !== FAMILY_ORIGIN) throw familyError_('ORIGIN','請從小日子正式網站連接。');
     if (!/^[A-Za-z0-9_-]{20,100}$/.test(request.requestId||'') || !/^[A-Za-z0-9_-]{20,100}$/.test(request.nonce||'')) throw familyError_('REQUEST','連線請求無效。');
     reply = handleFamily_(request);
-    if(reply.ok&&(request.action==='apply'||request.action==='pull')&&typeof lineDrain_==='function'){try{lineDrain_();}catch(lineError){reply.lineWarning=true;}}
+    if(reply.ok&&(request.action==='apply'||request.action==='pull')&&typeof lineDrain_==='function'){try{lineDrain_(true);}catch(lineError){reply.lineWarning=true;}}
   } catch (error) {
     reply = {ok:false,error:{code:error.familyCode||'SERVER',message:error.familyCode?error.message:'同步服務暫時無法完成，請稍後再試。'}};
   }
