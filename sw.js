@@ -1,10 +1,10 @@
 'use strict';
 // Cache only this app's files. Never store diary data or clear localStorage here.
 const PREFIX = 'ann-diary-pwa:' + self.registration.scope + ':';
-const CACHE = PREFIX + 'v2-record-feedback';
+const CACHE = PREFIX + 'v3-family';
 const appURL = name => new URL(name, self.registration.scope).href;
 const FILES = ['./', './index.html', './family-journal.html', './pwa.js',
-  './manifest.webmanifest', './app-icon.svg', './icon-192.png', './icon-512.png',
+  './family-core.js', './family.js', './family.css', './manifest.webmanifest', './app-icon.svg', './icon-192.png', './icon-512.png',
   './icon-maskable-512.png', './apple-touch-icon.png'];
 const FILE_URLS = new Set(FILES.map(appURL));
 
